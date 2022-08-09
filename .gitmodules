@@ -1,0 +1,3 @@
+[submodule "deployed"]
+	path = deployed
+	url = https://github.com/Ithil-protocol/deployed
