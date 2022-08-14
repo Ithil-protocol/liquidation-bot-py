@@ -47,7 +47,7 @@ def _setup_transaction_manager(config) -> TransactionManager:
     liquidator_abi_file = os.path.join("deployed/"+network+"/abi", LIQUIDATOR + ".json")
     addresses_file = os.path.join("deployed/"+network+"/deployments/core.json")
 
-    infura_key = _get_from_config_or_env_var(config, "API", "INFURA_KEY")
+    infura_key = _get_from_config_or_env_var(config, "API", "INFURA_API_KEY")
     private_key = _get_from_config_or_env_var(config, "USER", "PRIVATE_KEY")
 
     with open(margintrading_abi_file, "r") as abi_margintrading, open(liquidator_abi_file, "r") as abi_liquidator, open(addresses_file, "r") as addresses_f:
