@@ -111,10 +111,6 @@ class TransactionManager:
         liquidated_positions = []
 
         for i in range(len(self.strategies)):
-            logging.info(
-                f"Open positions: {len(self.open_positions[i])}"
-            )
-
             for j in range(len(self.open_positions[i])):
                 position = self.strategies[i].functions.positions(self.open_positions[i][j]).call()
                 score = self.strategies[i].functions.computeLiquidationScore(position).call()[0]
@@ -126,13 +122,10 @@ class TransactionManager:
                     if(self.sign_and_send(txn)):
                         strategy = "MarginTradingStrategy" if i == 0 else "YearnStrategy"
                         liquidated_positions.append(f"Position #{self.open_positions[i][j]} of {strategy} was liquidated")
-
         return liquidated_positions
 
 
     def sign_and_send(self, txn) -> bool:
-        logging.info("Preparing to transact")
-
         try:
             account_address = self.account.address
             logging.info(
@@ -143,6 +136,7 @@ class TransactionManager:
             txn_dict = txn.buildTransaction({
                 "nonce": nonce,
                 "gasPrice": self.web3Handle.eth.generate_gas_price() * 2,
+                "from": account_address,
             })
             logging.info(
                 f"Estimated gas in ETH for current transaction: {Web3.fromWei(self.web3Handle.eth.estimateGas(txn_dict)*10**9, 'ether')}"

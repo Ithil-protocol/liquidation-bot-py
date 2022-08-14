@@ -81,7 +81,7 @@ def _setup_telegram_bot(config) -> telegram.Bot:
     chatid = _get_from_config_or_env_var(config, "API", "TELEGRAM_CHAT_ID")
 
     bot = telegram.Bot(token=bot_token)
-    #bot.sendMessage(chat_id=chatid, text="Bot online")
+    bot.sendMessage(chat_id=chatid, text="Bot online")
 
     return bot
 
@@ -116,7 +116,7 @@ async def run_liquidation_bot(app):
     try:
         await _run_liquidation_bot(app)
     except:
-        #app[BOT].sendMessage(chat_id="-1001557806519", text="Bot offline")
+        app[BOT].sendMessage(chat_id="-1001557806519", text="Bot offline")
 
         raise GracefulExit()
 
