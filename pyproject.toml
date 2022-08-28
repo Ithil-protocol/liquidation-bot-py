@@ -19,6 +19,7 @@ python-telegram-bot = "^13.13"
 pytest = "^5.2"
 black = "^21.12b0"
 isort = "^5.10.1"
+pylint = "^2.14.5"
 
 [tool.poetry.scripts]
 liquidation_bot = "liquidation_bot.main:run_app"
