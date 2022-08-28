@@ -7,6 +7,7 @@ from web3 import Web3
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
 from web3.middleware import (construct_sign_and_send_raw_middleware,
                              geth_poa_middleware)
+from web3.contract import Contract
 
 
 class TransactionManager:
@@ -15,16 +16,14 @@ class TransactionManager:
         private_key: str,
         strategies_addresses: List[ChecksumAddress],
         strategies_abi: Dict,
-        liquidator_address: ChecksumAddress,
-        liquidator_abi: Dict,
+        liquidator: Contract,
         web3_handle: Web3,
     ):
         self.eth_balance = 0.0
         self.private_key = private_key
         self.strategies_addresses = strategies_addresses
         self.strategies_abi = strategies_abi
-        self.liquidator_address = liquidator_address
-        self.liquidator_abi = liquidator_abi
+        self.liquidator = liquidator
         self.liquidator = {}
         self.strategies = []
         self.open_event_filters = []
@@ -48,11 +47,6 @@ class TransactionManager:
         self.web3_handle.eth.set_gas_price_strategy(rpc_gas_price_strategy)
 
     def _init_contracts(self) -> None:
-        self.liquidator = self.web3_handle.eth.contract(
-            address=self.liquidator_address,
-            abi=self.liquidator_abi,
-        )
-
         for i in range(len(self.strategies_addresses)):
             contract = self.web3_handle.eth.contract(
                 address=self.strategies_addresses[i],

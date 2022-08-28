@@ -10,6 +10,9 @@ import telegram
 from aiohttp import web
 from aiohttp.web_runner import GracefulExit
 from web3 import Web3
+from web3.types import ABI
+from web3.contract import Contract
+from eth_typing.evm import ChecksumAddress
 
 from liquidation_bot.constants import (BOT, ETH_BALANCE, LIQUIDATOR,
                                        MARGIN_TRADING_STRATEGY, YEARN_STRATEGY)
@@ -32,8 +35,32 @@ def _get_from_config_or_env_var(
     return value
 
 
+def deployment_contract_file_path(network: str, contract_name: str) -> str:
+    return os.path.join(
+        "deployed/" + network + "/abi", contract_name + ".json"
+    )
+
+
+def load_abi_from_file(path: str) -> ABI:
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def deployment_addresses_file_path(network: str) -> str:
+    return os.path.join("deployed/" + network + "/deployments/core.json")
+
+
+def load_addresses_from_file(path: str) -> Dict[str, str]:
+    with open(path, "r") as f:
+        return json.load(f)
+
+
 def setup_web3(network: str, infura_key: str) -> Web3:
     return Web3(Web3.HTTPProvider(f"https://{network}.infura.io/v3/{infura_key}"))
+
+
+def setup_liquidator_contract(web3_handle: Web3, network: str, abi: ABI, address: ChecksumAddress) -> Contract:
+    return web3_handle.eth.contract(address=address, abi=abi)
 
 
 def _setup_transaction_manager(config) -> TransactionManager:
@@ -45,37 +72,50 @@ def _setup_transaction_manager(config) -> TransactionManager:
     liquidator_abi_file = os.path.join(
         "deployed/" + network + "/abi", LIQUIDATOR + ".json"
     )
-    addresses_file = os.path.join("deployed/" + network + "/deployments/core.json")
+
+    addresses = load_addresses_from_file(
+        path=deployment_addresses_file_path(network),
+    )
 
     infura_key = _get_from_config_or_env_var(config, "API", "INFURA_API_KEY")
     private_key = _get_from_config_or_env_var(config, "USER", "PRIVATE_KEY")
 
     with open(margintrading_abi_file, "r") as abi_margintrading, open(
         liquidator_abi_file, "r"
-    ) as abi_liquidator, open(addresses_file, "r") as addresses_f:
+    ) as abi_liquidator:
         margintrading_abi_parsed = json.load(abi_margintrading)
         liquidator_abi_parsed = json.load(abi_liquidator)
-        addresses_json = json.load(addresses_f)
 
-        liquidator_address_str = addresses_json[LIQUIDATOR]
+        liquidator_address_str = addresses[LIQUIDATOR]
         liquidator_address = Web3.toChecksumAddress(liquidator_address_str)
 
-        margintrading_address_str = addresses_json[MARGIN_TRADING_STRATEGY]
+        margintrading_address_str = addresses[MARGIN_TRADING_STRATEGY]
         margintrading_address = Web3.toChecksumAddress(margintrading_address_str)
 
-        yearn_address_str = addresses_json[YEARN_STRATEGY]
+        yearn_address_str = addresses[YEARN_STRATEGY]
         yearn_address = Web3.toChecksumAddress(yearn_address_str)
 
         strategies = [margintrading_address, yearn_address]
 
         web3_handle = setup_web3(network=network, infura_key=infura_key)
 
+        liquidator = setup_liquidator_contract(
+            web3_handle=web3_handle,
+            network=network,
+            abi=load_abi_from_file(
+                path=deployment_contract_file_path(
+                    network=network,
+                    contract_name=LIQUIDATOR,
+                )
+            ),
+            address=liquidator_address,
+        )
+
         return TransactionManager(
             private_key=private_key,
             strategies_addresses=strategies,
             strategies_abi=margintrading_abi_parsed,
-            liquidator_address=liquidator_address,
-            liquidator_abi=liquidator_abi_parsed,
+            liquidator=liquidator,
             web3_handle=web3_handle,
         )
 
