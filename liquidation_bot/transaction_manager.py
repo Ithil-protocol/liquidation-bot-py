@@ -41,20 +41,20 @@ class TransactionManager:
 
     def _init_account(self) -> None:
         self.account = web3.eth.Account.privateKeyToAccount(self.private_key)
-        self.web3Handle.middleware_onion.add(
+        self.web3_handle.middleware_onion.add(
             construct_sign_and_send_raw_middleware(self.account)
         )
-        self.web3Handle.middleware_onion.inject(geth_poa_middleware, layer=0)
-        self.web3Handle.eth.set_gas_price_strategy(rpc_gas_price_strategy)
+        self.web3_handle.middleware_onion.inject(geth_poa_middleware, layer=0)
+        self.web3_handle.eth.set_gas_price_strategy(rpc_gas_price_strategy)
 
     def _init_contracts(self) -> None:
-        self.liquidator = self.web3Handle.eth.contract(
+        self.liquidator = self.web3_handle.eth.contract(
             address=self.liquidator_address,
             abi=self.liquidator_abi,
         )
 
         for i in range(len(self.strategies_addresses)):
-            contract = self.web3Handle.eth.contract(
+            contract = self.web3_handle.eth.contract(
                 address=self.strategies_addresses[i],
                 abi=self.strategies_abi,
             )
@@ -136,27 +136,27 @@ class TransactionManager:
         try:
             account_address = self.account.address
             logging.info(
-                f"Account balance in ETH before: {Web3.fromWei(self.web3Handle.eth.getBalance(account_address), 'ether')}"
+                f"Account balance in ETH before: {Web3.fromWei(self.web3_handle.eth.getBalance(account_address), 'ether')}"
             )
-            assert self.web3Handle.eth.getBalance(account_address) > 0
-            nonce = self.web3Handle.eth.getTransactionCount(account_address)
+            assert self.web3_handle.eth.getBalance(account_address) > 0
+            nonce = self.web3_handle.eth.getTransactionCount(account_address)
             txn_dict = txn.buildTransaction(
                 {
                     "nonce": nonce,
-                    "gasPrice": self.web3Handle.eth.generate_gas_price() * 2,
+                    "gasPrice": self.web3_handle.eth.generate_gas_price() * 2,
                     "from": account_address,
                 }
             )
             logging.info(
-                f"Estimated gas in ETH for current transaction: {Web3.fromWei(self.web3Handle.eth.estimateGas(txn_dict)*10**9, 'ether')}"
+                f"Estimated gas in ETH for current transaction: {Web3.fromWei(self.web3_handle.eth.estimateGas(txn_dict)*10**9, 'ether')}"
             )
-            signed_txn = self.web3Handle.eth.account.signTransaction(
+            signed_txn = self.web3_handle.eth.account.signTransaction(
                 txn_dict, private_key=self.private_key
             )
-            result = self.web3Handle.eth.sendRawTransaction(signed_txn.rawTransaction)
-            self.web3Handle.eth.wait_for_transaction_receipt(result.hex())
+            result = self.web3_handle.eth.sendRawTransaction(signed_txn.rawTransaction)
+            self.web3_handle.eth.wait_for_transaction_receipt(result.hex())
             eth_balance_after = Web3.fromWei(
-                self.web3Handle.eth.getBalance(account_address), "ether"
+                self.web3_handle.eth.getBalance(account_address), "ether"
             )
             logging.info(f"Account balance in ETH after: {eth_balance_after}")
             self.eth_balance = eth_balance_after
