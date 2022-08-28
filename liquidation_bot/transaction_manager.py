@@ -12,17 +12,14 @@ from web3.middleware import (construct_sign_and_send_raw_middleware,
 class TransactionManager:
     def __init__(
         self,
-        infura_key: str,
-        network: str,
         private_key: str,
         strategies_addresses: List[ChecksumAddress],
         strategies_abi: Dict,
         liquidator_address: ChecksumAddress,
         liquidator_abi: Dict,
+        web3_handle: Web3,
     ):
         self.eth_balance = 0.0
-        self.infura_key = infura_key
-        self.network = network
         self.private_key = private_key
         self.strategies_addresses = strategies_addresses
         self.strategies_abi = strategies_abi
@@ -34,18 +31,13 @@ class TransactionManager:
         self.close_event_filters = []
         self.liquidation_event_filters = []
         self.open_positions = [[] for i in range(len(strategies_addresses))]
+        self.web3_handle = web3_handle
 
-        self._init_web_handle()
         self._init_account()
         self._init_contracts()
         self._init_filters()
 
         logging.info("Created TransactionManager")
-
-    def _init_web_handle(self) -> None:
-        self.web3Handle = Web3(
-            Web3.HTTPProvider(f"https://{self.network}.infura.io/v3/{self.infura_key}")
-        )
 
     def _init_account(self) -> None:
         self.account = web3.eth.Account.privateKeyToAccount(self.private_key)

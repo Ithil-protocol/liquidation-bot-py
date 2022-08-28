@@ -34,6 +34,10 @@ def _get_from_config_or_env_var(
     return value
 
 
+def setup_web3(network: str, infura_key: str) -> Web3:
+    return Web3(Web3.HTTPProvider(f"https://{network}.infura.io/v3/{infura_key}"))
+
+
 def _setup_transaction_manager(config) -> TransactionManager:
     network = config["DEFAULT"]["NETWORK"]
 
@@ -66,14 +70,15 @@ def _setup_transaction_manager(config) -> TransactionManager:
 
         strategies = [margintrading_address, yearn_address]
 
+        web3_handle = setup_web3(network=network, infura_key=infura_key)
+
         return TransactionManager(
-            infura_key=infura_key,
-            network=network,
             private_key=private_key,
             strategies_addresses=strategies,
             strategies_abi=margintrading_abi_parsed,
             liquidator_address=liquidator_address,
             liquidator_abi=liquidator_abi_parsed,
+            web3_handle=web3_handle,
         )
 
 
