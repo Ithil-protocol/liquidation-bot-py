@@ -1,39 +1,34 @@
 import logging
-from typing import Dict, List
+from typing import List
 
 import web3
-from eth_typing import ChecksumAddress
 from web3 import Web3
-from web3.gas_strategies.rpc import rpc_gas_price_strategy
-from web3.middleware import (construct_sign_and_send_raw_middleware,
-                             geth_poa_middleware)
 from web3.contract import Contract
+from web3.gas_strategies.rpc import rpc_gas_price_strategy
+from web3.middleware import construct_sign_and_send_raw_middleware, geth_poa_middleware
 
 
 class TransactionManager:
     def __init__(
         self,
-        private_key: str,
-        strategies_addresses: List[ChecksumAddress],
-        strategies_abi: Dict,
-        liquidator: Contract,
         web3_handle: Web3,
+        private_key: str,
+        strategies: List[Contract],
+        liquidator: Contract,
     ):
         self.eth_balance = 0.0
         self.private_key = private_key
-        self.strategies_addresses = strategies_addresses
-        self.strategies_abi = strategies_abi
+        self.strategies = strategies
         self.liquidator = liquidator
         self.liquidator = {}
         self.strategies = []
         self.open_event_filters = []
         self.close_event_filters = []
         self.liquidation_event_filters = []
-        self.open_positions = [[] for i in range(len(strategies_addresses))]
+        self.open_positions = [[] for i in range(len(strategies))]
         self.web3_handle = web3_handle
 
         self._init_account()
-        self._init_contracts()
         self._init_filters()
 
         logging.info("Created TransactionManager")
@@ -45,14 +40,6 @@ class TransactionManager:
         )
         self.web3_handle.middleware_onion.inject(geth_poa_middleware, layer=0)
         self.web3_handle.eth.set_gas_price_strategy(rpc_gas_price_strategy)
-
-    def _init_contracts(self) -> None:
-        for i in range(len(self.strategies_addresses)):
-            contract = self.web3_handle.eth.contract(
-                address=self.strategies_addresses[i],
-                abi=self.strategies_abi,
-            )
-            self.strategies.append(contract)
 
     def _init_filters(self) -> None:
         for i in range(len(self.strategies)):

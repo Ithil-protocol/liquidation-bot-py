@@ -9,13 +9,19 @@ from typing import Dict
 import telegram
 from aiohttp import web
 from aiohttp.web_runner import GracefulExit
-from web3 import Web3
-from web3.types import ABI
-from web3.contract import Contract
 from eth_typing.evm import ChecksumAddress
+from web3 import Web3
+from web3.contract import Contract
+from web3.types import ABI
 
-from liquidation_bot.constants import (BOT, ETH_BALANCE, LIQUIDATOR,
-                                       MARGIN_TRADING_STRATEGY, YEARN_STRATEGY)
+from liquidation_bot.constants import (
+    BOT,
+    ETH_BALANCE,
+    LIQUIDATOR,
+    MARGIN_TRADING_STRATEGY,
+    STRATEGIES,
+    YEARN_STRATEGY,
+)
 from liquidation_bot.transaction_manager import TransactionManager
 
 logging.basicConfig(
@@ -36,9 +42,7 @@ def _get_from_config_or_env_var(
 
 
 def deployment_contract_file_path(network: str, contract_name: str) -> str:
-    return os.path.join(
-        "deployed/" + network + "/abi", contract_name + ".json"
-    )
+    return os.path.join("deployed/" + network + "/abi", contract_name + ".json")
 
 
 def load_abi_from_file(path: str) -> ABI:
@@ -55,63 +59,58 @@ def load_addresses_from_file(path: str) -> Dict[str, str]:
         return json.load(f)
 
 
+def make_address(addresses: Dict[str, str], contract_name: str) -> ChecksumAddress:
+    return Web3.toChecksumAddress(addresses[contract_name])
+
+
 def setup_web3(network: str, infura_key: str) -> Web3:
     return Web3(Web3.HTTPProvider(f"https://{network}.infura.io/v3/{infura_key}"))
 
 
-def setup_contract(web3_handle: Web3, network: str, abi: ABI, address: ChecksumAddress) -> Contract:
+def setup_contract(
+    web3_handle: Web3, abi: ABI, address: ChecksumAddress
+) -> Contract:
     return web3_handle.eth.contract(address=address, abi=abi)
 
 
 def _setup_transaction_manager(config) -> TransactionManager:
     network = config["DEFAULT"]["NETWORK"]
-
-    margintrading_abi_file = os.path.join(
-        "deployed/" + network + "/abi", MARGIN_TRADING_STRATEGY + ".json"
-    )
-
     addresses = load_addresses_from_file(
         path=deployment_addresses_file_path(network),
     )
-
     infura_key = _get_from_config_or_env_var(config, "API", "INFURA_API_KEY")
     private_key = _get_from_config_or_env_var(config, "USER", "PRIVATE_KEY")
-
-    with open(margintrading_abi_file, "r") as abi_margintrading:
-        margintrading_abi_parsed = json.load(abi_margintrading)
-
-        liquidator_address_str = addresses[LIQUIDATOR]
-        liquidator_address = Web3.toChecksumAddress(liquidator_address_str)
-
-        margintrading_address_str = addresses[MARGIN_TRADING_STRATEGY]
-        margintrading_address = Web3.toChecksumAddress(margintrading_address_str)
-
-        yearn_address_str = addresses[YEARN_STRATEGY]
-        yearn_address = Web3.toChecksumAddress(yearn_address_str)
-
-        strategies = [margintrading_address, yearn_address]
-
-        web3_handle = setup_web3(network=network, infura_key=infura_key)
-
-        liquidator = setup_contract(
+    web3_handle = setup_web3(network=network, infura_key=infura_key)
+    liquidator = setup_contract(
+        web3_handle=web3_handle,
+        abi=load_abi_from_file(
+            path=deployment_contract_file_path(
+                network=network,
+                contract_name=LIQUIDATOR,
+            )
+        ),
+        address=make_address(addresses=addresses, contract_name=LIQUIDATOR),
+    )
+    strategies = [
+        setup_contract(
             web3_handle=web3_handle,
-            network=network,
             abi=load_abi_from_file(
                 path=deployment_contract_file_path(
                     network=network,
-                    contract_name=LIQUIDATOR,
-                )
+                    contract_name=strategy,
+                ),
             ),
-            address=liquidator_address,
+            address=make_address(addresses=addresses, contract_name=strategy),
         )
+        for strategy in STRATEGIES
+    ]
 
-        return TransactionManager(
-            private_key=private_key,
-            strategies_addresses=strategies,
-            strategies_abi=margintrading_abi_parsed,
-            liquidator=liquidator,
-            web3_handle=web3_handle,
-        )
+    return TransactionManager(
+        web3_handle=web3_handle,
+        private_key=private_key,
+        liquidator=liquidator,
+        strategies=strategies,
+    )
 
 
 def _setup_telegram_bot(config) -> telegram.Bot:
