@@ -3,14 +3,12 @@ import configparser
 import json
 import logging
 import os
-import time
 from argparse import ArgumentParser
 from typing import Dict
 
 import telegram
 from aiohttp import web
 from aiohttp.web_runner import GracefulExit
-from art import text2art
 from web3 import Web3
 
 from liquidation_bot.constants import (BOT, ETH_BALANCE, LIQUIDATOR,

@@ -64,17 +64,6 @@ optional = false
 python-versions = "*"
 
 [[package]]
-name = "art"
-version = "5.5"
-description = "ASCII Art Library For Python"
-category = "main"
-optional = false
-python-versions = ">=2.7"
-
-[package.extras]
-dev = ["coverage (>=4.1)", "codecov (>=2.0.15)", "vulture (>=1.0)", "bandit (>=1.5.1)", "pydocstyle (>=3.0.0)"]
-
-[[package]]
 name = "astroid"
 version = "2.11.7"
 description = "An abstract syntax tree for Python with inference support."
@@ -991,7 +980,7 @@ docs = ["jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "jaraco.packaging (>=9)
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "42425ff1f47fc155b585cedba6fd64abc88672479d2c007e2b4534c2b464c475"
+content-hash = "1461d6d5171d646b2ad62e6a3332473db2c9367faf015b2da4d80bd9cee56f62"
 
 [metadata.files]
 aiohttp = [
@@ -1076,10 +1065,6 @@ apscheduler = []
 argparse = [
     {file = "argparse-1.4.0-py2.py3-none-any.whl", hash = "sha256:c31647edb69fd3d465a847ea3157d37bed1f95f19760b11a47aa91c04b666314"},
     {file = "argparse-1.4.0.tar.gz", hash = "sha256:62b089a55be1d8949cd2bc7e0df0bddb9e028faefc8c32038cc84862aefdd6e4"},
-]
-art = [
-    {file = "art-5.5-py2.py3-none-any.whl", hash = "sha256:cd1bbc33f4d3f3b241244726496fac4899e6f0d8bf743f0129c7588d25325eb8"},
-    {file = "art-5.5.tar.gz", hash = "sha256:9a0f3b44dccdcffab7811061eba1914378f75a33e7c535dcc37cc9d000642640"},
 ]
 astroid = []
 async-timeout = [
