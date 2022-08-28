@@ -59,7 +59,7 @@ def setup_web3(network: str, infura_key: str) -> Web3:
     return Web3(Web3.HTTPProvider(f"https://{network}.infura.io/v3/{infura_key}"))
 
 
-def setup_liquidator_contract(web3_handle: Web3, network: str, abi: ABI, address: ChecksumAddress) -> Contract:
+def setup_contract(web3_handle: Web3, network: str, abi: ABI, address: ChecksumAddress) -> Contract:
     return web3_handle.eth.contract(address=address, abi=abi)
 
 
@@ -93,7 +93,7 @@ def _setup_transaction_manager(config) -> TransactionManager:
 
         web3_handle = setup_web3(network=network, infura_key=infura_key)
 
-        liquidator = setup_liquidator_contract(
+        liquidator = setup_contract(
             web3_handle=web3_handle,
             network=network,
             abi=load_abi_from_file(
