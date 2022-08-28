@@ -69,9 +69,6 @@ def _setup_transaction_manager(config) -> TransactionManager:
     margintrading_abi_file = os.path.join(
         "deployed/" + network + "/abi", MARGIN_TRADING_STRATEGY + ".json"
     )
-    liquidator_abi_file = os.path.join(
-        "deployed/" + network + "/abi", LIQUIDATOR + ".json"
-    )
 
     addresses = load_addresses_from_file(
         path=deployment_addresses_file_path(network),
@@ -80,11 +77,8 @@ def _setup_transaction_manager(config) -> TransactionManager:
     infura_key = _get_from_config_or_env_var(config, "API", "INFURA_API_KEY")
     private_key = _get_from_config_or_env_var(config, "USER", "PRIVATE_KEY")
 
-    with open(margintrading_abi_file, "r") as abi_margintrading, open(
-        liquidator_abi_file, "r"
-    ) as abi_liquidator:
+    with open(margintrading_abi_file, "r") as abi_margintrading:
         margintrading_abi_parsed = json.load(abi_margintrading)
-        liquidator_abi_parsed = json.load(abi_liquidator)
 
         liquidator_address_str = addresses[LIQUIDATOR]
         liquidator_address = Web3.toChecksumAddress(liquidator_address_str)
