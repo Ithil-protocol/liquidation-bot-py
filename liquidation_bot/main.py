@@ -18,9 +18,7 @@ from liquidation_bot.constants import (
     BOT,
     ETH_BALANCE,
     LIQUIDATOR,
-    MARGIN_TRADING_STRATEGY,
     STRATEGIES,
-    YEARN_STRATEGY,
 )
 from liquidation_bot.transaction_manager import TransactionManager
 
