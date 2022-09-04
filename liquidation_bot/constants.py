@@ -1,3 +1,5 @@
+DEFAULT_SLEEP_DURATION_IN_SECONDS = 5
+
 ETH_BALANCE = "eth_balance"
 
 

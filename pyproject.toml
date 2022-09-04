@@ -7,12 +7,12 @@ authors = ["Devs <devs@ithil.fi>"]
 [tool.poetry.dependencies]
 python = "^3.8"
 requests = "^2.26.0"
-argparse = "^1.4.0"
 aiohttp = "^3.8.1"
 asyncio = "^3.4.3"
 statistics = "^1.0.3"
 web3 = "^5.30.0"
 python-telegram-bot = "^13.13"
+python-dotenv = "^0.21.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
