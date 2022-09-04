@@ -1,11 +1,15 @@
 import logging
-from typing import List
+from typing import Dict, List, Set
 
 import web3
+from eth_typing.evm import ChecksumAddress
 from web3 import Web3
 from web3.contract import Contract
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
-from web3.middleware import construct_sign_and_send_raw_middleware, geth_poa_middleware
+from web3.middleware.geth_poa import geth_poa_middleware
+from web3.middleware.signing import construct_sign_and_send_raw_middleware
+from web3.types import LogReceipt
+from web3._utils.filters import LogFilter
 
 
 class TransactionManager:
@@ -20,12 +24,12 @@ class TransactionManager:
         self.private_key = private_key
         self.strategies = strategies
         self.liquidator = liquidator
-        self.liquidator = {}
-        self.strategies = []
-        self.open_event_filters = []
-        self.close_event_filters = []
-        self.liquidation_event_filters = []
-        self.open_positions = [[] for i in range(len(strategies))]
+        self.open_event_filters: Dict[ChecksumAddress, LogFilter] = {}
+        self.close_event_filters: Dict[ChecksumAddress, LogFilter] = {}
+        self.liquidation_event_filters: Dict[ChecksumAddress, LogFilter] = {}
+        self.open_positions: Dict[ChecksumAddress, Set[int]] = {
+            strategy.address: set() for strategy in strategies
+        }
         self.web3_handle = web3_handle
 
         self._init_account()
@@ -42,75 +46,78 @@ class TransactionManager:
         self.web3_handle.eth.set_gas_price_strategy(rpc_gas_price_strategy)
 
     def _init_filters(self) -> None:
-        for i in range(len(self.strategies)):
-            self.open_event_filters.append(
-                self.strategies[i].events.PositionWasOpened.createFilter(fromBlock=0)
-            )
-            self.close_event_filters.append(
-                self.strategies[i].events.PositionWasClosed.createFilter(fromBlock=0)
-            )
-            self.liquidation_event_filters.append(
-                self.strategies[i].events.PositionWasLiquidated.createFilter(
-                    fromBlock=0
-                )
-            )
+        for strategy in self.strategies:
+            self.open_event_filters[
+                strategy.address
+            ] = strategy.events.PositionWasOpened.createFilter(fromBlock=0)
+            self.close_event_filters[
+                strategy.address
+            ] = strategy.events.PositionWasClosed.createFilter(fromBlock=0)
+            self.liquidation_event_filters[
+                strategy.address
+            ] = strategy.events.PositionWasLiquidated.createFilter(fromBlock=0)
+
+    def get_position_id(self, log_receipt: LogReceipt) -> int:
+        # XXX we ignore the type hint here as the actual type of log receipt was overloaded
+        return log_receipt["args"]["id"] # type: ignore
+
+    def init_positions(self):
+        for strategy in self.strategies:
+            for position_was_opened in self.open_event_filters[
+                strategy.address
+            ].get_all_entries():
+                position_id = self.get_position_id(position_was_opened)
+                self.open_positions[strategy.address].add(position_id)
+
+            for position_was_closed in self.close_event_filters[
+                strategy.address
+            ].get_all_entries():
+                position_id = self.get_position_id(position_was_closed)
+                self.open_positions[strategy.address].remove(position_id)
+
+            for position_was_liquidated in self.liquidation_event_filters[
+                strategy.address
+            ].get_all_entries():
+                position_id = self.get_position_id(position_was_liquidated)
+                self.open_positions[strategy.address].remove(position_id)
 
     def update_positions(self):
-        for i in range(len(self.strategies)):
-            try:
-                self.open_positions[i][0]
+        for strategy in self.strategies:
+            for position_was_opened in self.open_event_filters[
+                strategy.address
+            ].get_new_entries():
+                position_id = self.get_position_id(position_was_opened)
+                self.open_positions[strategy.address].add(position_id)
 
-                for PositionWasOpened in self.open_event_filters[i].get_new_entries():
-                    self.open_positions[i].append(PositionWasOpened["args"]["id"])
+            for position_was_closed in self.close_event_filters[
+                strategy.address
+            ].get_new_entries():
+                position_id = self.get_position_id(position_was_closed)
+                self.open_positions[strategy.address].remove(position_id)
 
-                for PositionWasClosed in self.close_event_filters[i].get_new_entries():
-                    self.open_positions[i].remove(PositionWasClosed["args"]["id"])
-
-                for PositionWasLiquidated in self.liquidation_event_filters[
-                    i
-                ].get_new_entries():
-                    self.open_positions[i].remove(PositionWasLiquidated["args"]["id"])
-            except:
-                for PositionWasOpened in self.open_event_filters[i].get_all_entries():
-                    self.open_positions[i].append(PositionWasOpened["args"]["id"])
-
-                for PositionWasClosed in self.close_event_filters[i].get_all_entries():
-                    self.open_positions[i].remove(PositionWasClosed["args"]["id"])
-
-                for PositionWasLiquidated in self.liquidation_event_filters[
-                    i
-                ].get_all_entries():
-                    self.open_positions[i].remove(PositionWasLiquidated["args"]["id"])
+            for position_was_liquidated in self.liquidation_event_filters[
+                strategy.address
+            ].get_new_entries():
+                position_id = self.get_position_id(position_was_liquidated)
+                self.open_positions[strategy.address].remove(position_id)
 
     def check_liquidability(self) -> List:
         liquidated_positions = []
 
-        for i in range(len(self.strategies)):
-            for j in range(len(self.open_positions[i])):
-                position = (
-                    self.strategies[i]
-                    .functions.positions(self.open_positions[i][j])
-                    .call()
-                )
-                score = (
-                    self.strategies[i]
-                    .functions.computeLiquidationScore(position)
-                    .call()[0]
-                )
+        for strategy in self.strategies:
+            for open_position in self.open_positions[strategy.address]:
+                position = strategy.functions.positions(open_position).call()
+                score = strategy.functions.computeLiquidationScore(position).call()[0]
                 if score > 0:
-                    logging.info(
-                        f"Preparing to liquidate position #{self.open_positions[i][j]}"
-                    )
+                    logging.info(f"Preparing to liquidate position #{open_position}")
                     txn = self.liquidator.functions.liquidateSingle(
-                        self.strategies_addresses[i], self.open_positions[i][j]
+                        strategy.address, open_position
                     )
                     if self.sign_and_send(txn):
-                        strategy = (
-                            "MarginTradingStrategy" if i == 0 else "YearnStrategy"
-                        )
                         liquidated_positions.append(
-                            f"Position #{self.open_positions[i][j]} of {strategy} was liquidated"
+                            f"Position #{open_position} of strategy {strategy.address} was liquidated"
                         )
+
         return liquidated_positions
 
     def sign_and_send(self, txn) -> bool:

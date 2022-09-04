@@ -1,21 +1,22 @@
 import asyncio
-import configparser
 import json
 import logging
 import os
-from argparse import ArgumentParser
 from typing import Dict
 
 import telegram
 from aiohttp import web
 from aiohttp.web_runner import GracefulExit
+from dotenv import load_dotenv
 from eth_typing.evm import ChecksumAddress
 from web3 import Web3
 from web3.contract import Contract
 from web3.types import ABI
 
+from liquidation_bot.config import Configuration
 from liquidation_bot.constants import (
     BOT,
+    DEFAULT_SLEEP_DURATION_IN_SECONDS,
     ETH_BALANCE,
     LIQUIDATOR,
     STRATEGIES,
@@ -27,16 +28,21 @@ logging.basicConfig(
 )
 
 
-def _get_from_config_or_env_var(
-    config: Dict,
-    section: str,
-    key: str,
-) -> str:
-    value = config[section][key]
-    if value == "":
-        value = os.environ[key]
+def load_configuration() -> Configuration:
+    load_dotenv()
 
-    return value
+    return Configuration(
+        infura_api_key=os.environ["INFURA_API_KEY"],
+        network=os.environ["NETWORK"],
+        private_key=os.environ["PRIVATE_KEY"],
+        sleep_duration_in_seconds=int(
+            os.environ.get(
+                "SLEEP_DURATION_IN_SECONDS", DEFAULT_SLEEP_DURATION_IN_SECONDS
+            )
+        ),
+        telegram_chat_id=os.environ["TELEGRAM_CHAT_ID"],
+        telegram_key=os.environ["TELEGRAM_KEY"],
+    )
 
 
 def deployment_contract_file_path(network: str, contract_name: str) -> str:
@@ -52,33 +58,32 @@ def deployment_addresses_file_path(network: str) -> str:
     return os.path.join("deployed/" + network + "/deployments/core.json")
 
 
-def load_addresses_from_file(path: str) -> Dict[str, str]:
-    with open(path, "r") as f:
-        return json.load(f)
-
-
 def make_address(addresses: Dict[str, str], contract_name: str) -> ChecksumAddress:
     return Web3.toChecksumAddress(addresses[contract_name])
 
 
-def setup_web3(network: str, infura_key: str) -> Web3:
-    return Web3(Web3.HTTPProvider(f"https://{network}.infura.io/v3/{infura_key}"))
+def setup_web3(network: str, infura_api_key: str) -> Web3:
+    return Web3(Web3.HTTPProvider(f"https://{network}.infura.io/v3/{infura_api_key}"))
 
 
-def setup_contract(
-    web3_handle: Web3, abi: ABI, address: ChecksumAddress
-) -> Contract:
+def load_contract_address(network: str, contract_name: str) -> ChecksumAddress:
+    path = f"deployed/{network}/deployments/{contract_name}.json"
+    with open(path, "r") as f:
+        data = json.load(f)
+        address = data["address"]
+        return Web3.toChecksumAddress(address)
+
+
+def setup_contract(web3_handle: Web3, abi: ABI, address: ChecksumAddress) -> Contract:
     return web3_handle.eth.contract(address=address, abi=abi)
 
 
-def _setup_transaction_manager(config) -> TransactionManager:
-    network = config["DEFAULT"]["NETWORK"]
-    addresses = load_addresses_from_file(
-        path=deployment_addresses_file_path(network),
-    )
-    infura_key = _get_from_config_or_env_var(config, "API", "INFURA_API_KEY")
-    private_key = _get_from_config_or_env_var(config, "USER", "PRIVATE_KEY")
-    web3_handle = setup_web3(network=network, infura_key=infura_key)
+def _setup_transaction_manager(
+    network: str,
+    infura_api_key: str,
+    private_key: str,
+) -> TransactionManager:
+    web3_handle = setup_web3(network=network, infura_api_key=infura_api_key)
     liquidator = setup_contract(
         web3_handle=web3_handle,
         abi=load_abi_from_file(
@@ -87,7 +92,7 @@ def _setup_transaction_manager(config) -> TransactionManager:
                 contract_name=LIQUIDATOR,
             )
         ),
-        address=make_address(addresses=addresses, contract_name=LIQUIDATOR),
+        address=load_contract_address(network=network, contract_name=LIQUIDATOR),
     )
     strategies = [
         setup_contract(
@@ -98,7 +103,7 @@ def _setup_transaction_manager(config) -> TransactionManager:
                     contract_name=strategy,
                 ),
             ),
-            address=make_address(addresses=addresses, contract_name=strategy),
+            address=load_contract_address(network=network, contract_name=strategy),
         )
         for strategy in STRATEGIES
     ]
@@ -111,43 +116,35 @@ def _setup_transaction_manager(config) -> TransactionManager:
     )
 
 
-def _setup_telegram_bot(config) -> telegram.Bot:
-    bot_token = _get_from_config_or_env_var(config, "API", "TELEGRAM_KEY")
-    chatid = _get_from_config_or_env_var(config, "API", "TELEGRAM_CHAT_ID")
-
-    bot = telegram.Bot(token=bot_token)
-    bot.sendMessage(chat_id=chatid, text="Bot online")
+def _setup_telegram_bot(telegram_chat_id: str, telegram_key: str) -> telegram.Bot:
+    bot = telegram.Bot(token=telegram_key)
+    bot.sendMessage(chat_id=telegram_chat_id, text="Bot online")
 
     return bot
 
 
 async def _run_liquidation_bot(app):
-    parser = ArgumentParser()
-    parser.add_argument(
-        "configfile", metavar="configfile", type=str, help="The bot configuration file"
-    )
-    args = parser.parse_args()
+    config = load_configuration()
 
-    config = configparser.ConfigParser()
-    config.read(args.configfile)
-    chatid = _get_from_config_or_env_var(config, "API", "TELEGRAM_CHAT_ID")
-    sleep_duration = int(
-        _get_from_config_or_env_var(config, "DEFAULT", "SLEEP_DURATION_IN_SECONDS")
+    transaction_manager = _setup_transaction_manager(
+        network=config.network,
+        infura_api_key=config.infura_api_key,
+        private_key=config.private_key,
     )
 
-    transaction_manager = _setup_transaction_manager(config)
-    # app[ETH_BALANCE] = transaction_manager.eth_balance
+    app[BOT] = _setup_telegram_bot(
+        telegram_chat_id=config.telegram_chat_id,
+        telegram_key=config.telegram_key,
+    )
 
-    app[BOT] = _setup_telegram_bot(config)
+    transaction_manager.init_positions()
 
     while True:
         transaction_manager.update_positions()
         liquidated_positions = transaction_manager.check_liquidability()
-        if len(liquidated_positions) > 0:
-            for val in liquidated_positions:
-                app[BOT].sendMessage(chat_id=chatid, text=val)
-
-        await asyncio.sleep(sleep_duration)
+        for val in liquidated_positions:
+            app[BOT].sendMessage(chat_id=config.telegram_chat_id, text=val)
+        await asyncio.sleep(config.sleep_duration_in_seconds)
 
 
 async def run_liquidation_bot(app):

@@ -17,4 +17,4 @@ USER liquidation_bot:liquidation_bot
 
 # Run app
 ENTRYPOINT ["python"]
-CMD ["-m", "liquidation_bot", "config.ini"]
+CMD ["-m", "liquidation_bot"]
